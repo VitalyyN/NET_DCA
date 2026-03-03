@@ -23,6 +23,3 @@ state.txt
 .idea/
 *.swp
 *.swo
-
-# Submodules
-QuikPy/
