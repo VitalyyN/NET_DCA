@@ -1,0 +1,28 @@
+# Lua scripts
+*.lua
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+env/
+venv/
+ENV/
+
+# State file
+state.txt
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Submodules
+QuikPy/
