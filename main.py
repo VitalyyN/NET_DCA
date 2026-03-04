@@ -139,9 +139,10 @@ def check_levels_executed(cur_pos, qp):
         return False  # Позиция не изменилась — уровень не исполнен
     # Проверяем кратность позиции LOT_PER_LEVEL
     if cur_pos % LOT_PER_LEVEL == 0 and abs(cur_pos) <= MAX_LOTS_TOTAL:
-        # Если позиция закрылась — обновляем базовую цену по текущей рыночной цене
+        # Если позиция закрылась — обновляем базовую цену по цене последней сделки
         if cur_pos == 0:
-            base_price = get_current_price(qp)
+            trade_price = get_last_trade_price(qp)
+            base_price = trade_price if trade_price is not None else base_price
             print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Новая базовая цена: {base_price}")
             time.sleep(2)  # Задержка 2 секунды после закрытия позиции
         elif cur_pos > 0:
@@ -475,7 +476,7 @@ if __name__ == "__main__":
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
                         cancel_all_orders(qp)
                         set_grid(qp, base_price)
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}")
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
                 time.sleep(POLL_MS)
                 
             except Exception as e:
