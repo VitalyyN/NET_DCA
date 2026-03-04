@@ -142,7 +142,7 @@ def check_levels_executed(cur_pos, qp):
         # Если позиция закрылась — обновляем базовую цену по текущей рыночной цене
         if cur_pos == 0:
             base_price = get_current_price(qp)
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Новая базовая цена: {base_price}")
+            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Новая базовая цена: {base_price}")
             time.sleep(2)  # Задержка 2 секунды после закрытия позиции
         elif cur_pos > 0:
             trade_price = get_last_trade_price(qp)
@@ -335,7 +335,7 @@ def check_base_price_by_grid(qp, price):
                     if price_to_order >= begin_grid_price:
                         send_limit_order(qp, price_to_order, abs(cur_pos),  "S")
                         first_start = False
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
                         return True
             elif cur_pos < 0:
                 begin_grid_price = base_price - (abs(cur_pos) // LOT_PER_LEVEL) * GRID_STEP
@@ -345,7 +345,7 @@ def check_base_price_by_grid(qp, price):
                     if price_to_order <= begin_grid_price:
                         send_limit_order(qp, price_to_order, abs(cur_pos),  "B")
                         first_start = False
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
                         return True
         if abs(price - base_price) >= GRID_STEP / 2:
             return True
@@ -402,8 +402,7 @@ if __name__ == "__main__":
                     current_price = get_current_price(qp)
                     time.sleep(POLL_MS)
                 if wait_printed:
-                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Цена вернулась к базовой — строим сетку")
-                print()  # Новая строка после выхода из цикла ожидания
+                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Цена вернулась к базовой — строим сетку\n")
         else: # Если восстановление не требуется (файл пуст/0)
             base_price = get_current_price(qp) # Устанавливаем текущую рыночную цену как базовую
             # Если цена по LAST равна 0, попробуем использовать BID/OFFER
@@ -436,7 +435,7 @@ if __name__ == "__main__":
                 print("Внимание: Не удалось установить базовую цену по рынку. Используется 0.")
 
         set_grid(qp, base_price)
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена. Базовая цена: {base_price}")
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена. Базовая цена: {base_price}\n")
         # Сохраняем базовую цену на диск для последующих перезапусков
         write_in_file(base_price)
         time.sleep(POLL_MS * 2)
@@ -454,9 +453,8 @@ if __name__ == "__main__":
                     continue
                 if in_session_wait:
                     in_session_wait = False
-                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
-                    print()  # Новая строка после выхода из режима ожидания сессии
-                
+                    print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
+
                 if check_time(qp):
                     cur_pos = get_current_position(qp)
                     current_price = get_current_price(qp)
@@ -472,12 +470,12 @@ if __name__ == "__main__":
                     # Если активных заявок нет и сетка должна быть — восстанавливаем после клиринга
                     if len(orders) == 0 and should_have_grid:
                         set_grid(qp, base_price)
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
                     # При изменении позиции и выполнении уровня — отменяем старые заявки и переставляем сетку
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
                         cancel_all_orders(qp)
                         set_grid(qp, base_price)
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}")
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}")
                 time.sleep(POLL_MS)
                 
             except Exception as e:
