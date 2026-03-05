@@ -472,6 +472,15 @@ if __name__ == "__main__":
                 if connection_lost:
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
+                    # После подключения даем время на получение актуальных данных
+                    time.sleep(2)
+                    # Проверяем наличие заявок после подключения
+                    orders_after_connect = find_active_orders(qp)
+                    is_orders_sent = len(orders_after_connect) > 0  # True если заявки есть
+                    if is_orders_sent:
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Заявки на месте ({len(orders_after_connect)} шт.), продолжаем работу")
+                    # Обновляем prev_position для корректного отслеживания изменений
+                    prev_position = get_current_position(qp)
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
                     if not in_session_wait:
