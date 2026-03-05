@@ -507,7 +507,7 @@ if __name__ == "__main__":
                     # Если активных заявок нет и сетка должна быть — восстанавливаем после клиринга
                     if len(orders) == 0 and should_have_grid and is_orders_sent:
                         set_grid(qp, base_price)
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена")
                         is_orders_sent = False  # Ждём появления заявок
                     # Если заявки появились — разрешаем будущее восстановление
                     if len(orders) > 0:
