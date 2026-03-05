@@ -17,10 +17,10 @@ from settings import CLASS, SECCODE, BASE_ASSET_CODE, ACCOUNT, CLIENT_CODE, LOT_
 # - position: текущая позиция по инструменту (в лотах)
 # - base_price: текущая базовая цена сетки
 # - prev_position: предыдущая позиция (для отслеживания изменений)
-# - is_orders_sent: флаг, что сетка заявок выставлена
 # - count_exept: счётчик подряд возникших исключений в основном цикле
 # - first_start: флаг первого запуска при непустой позиции для выравнивания
 # - file_name: файл для хранения базовой цены между перезапусками
+# - is_orders_sent: флаг, что сетка заявок выставлена
 trans_id = 1
 position = 0
 base_price = 0
@@ -174,6 +174,22 @@ def check_time(qp):
         return False
     current_time = parts[0] + ':' + parts[1]
     return START_TIME <= current_time <= END_TIME
+
+
+def check_quik_connection(qp):
+    """Проверяет соединение QUIK с сервером.
+
+    Возвращает:
+        bool: True, если QUIK подключен к серверу; False, если отключен.
+    """
+    try:
+        result = qp.IsConnected()
+        if not result or 'data' not in result:
+            return False
+        return result['data'] == 1
+    except (KeyError, ValueError, TypeError):
+        # Если проверка недоступна, считаем соединение активным
+        return True
 
 
 def check_session_status(qp):
@@ -443,8 +459,19 @@ if __name__ == "__main__":
 
         # Основной цикл работы робота: следим за временем, состоянием позиций и активными заявками
         in_session_wait = False
+        connection_lost = False
         while True:
             try:
+                # Проверяем соединение QUIK с сервером
+                if not check_quik_connection(qp):
+                    if not connection_lost:
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
+                        connection_lost = True
+                    time.sleep(POLL_MS * 10)
+                    continue
+                if connection_lost:
+                    connection_lost = False
+                    print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
                     if not in_session_wait:
@@ -469,14 +496,19 @@ if __name__ == "__main__":
                             should_have_grid = False  # Ждём возврата цены или закрытия
 
                     # Если активных заявок нет и сетка должна быть — восстанавливаем после клиринга
-                    if len(orders) == 0 and should_have_grid:
+                    if len(orders) == 0 and should_have_grid and is_orders_sent:
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
+                        is_orders_sent = False  # Ждём появления заявок
+                    # Если заявки появились — разрешаем будущее восстановление
+                    if len(orders) > 0:
+                        is_orders_sent = True
                     # При изменении позиции и выполнении уровня — отменяем старые заявки и переставляем сетку
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
                         cancel_all_orders(qp)
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
+                        is_orders_sent = False  # Ждём появления заявок
                 time.sleep(POLL_MS)
                 
             except Exception as e:
