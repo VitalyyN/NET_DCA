@@ -228,6 +228,8 @@ def send_limit_order(qp, price, volume, side):
     """
     global trans_id
     trans_id += 1
+    # Округляем цену до 6 знаков после запятой для избежания проблем с float
+    price = round(float(price), 6)
     # Формируем словарь транзакции. Все значения должны быть строками
     transaction = {  # Все значения должны передаваться в виде строк
         'TRANS_ID': str(trans_id),  # Номер транзакции задается клиентом
