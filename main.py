@@ -294,11 +294,10 @@ def set_grid(qp, price):
 
     Параметры:
         qp: экземпляр QuikPy.
-        price (float): базовая цена сетки.
+        price (int): базовая цена сетки.
     """
-    global is_orders_sent, base_price
-    # Получаем актуальную позицию из QUIK
-    qty = get_current_position(qp)
+    global is_orders_sent, position, base_price
+    qty = position
     if qty == 0:
         # При нулевой позиции используем переданную цену для построения сетки
         for i in range(1, LEVELS+1):
