@@ -293,15 +293,21 @@ def set_grid(qp, price):
     """Выставляет сетку лимитных заявок вокруг заданной цены.
 
     Логика:
+        - Перед выставлением сетки отменяет все активные заявки.
         - Если позиция нулевая — строит симметричную сетку от заданной цены.
         - Если позиция не нулевая — учитывает ограничение MAX_LOTS_TOTAL.
 
     Параметры:
         qp: экземпляр QuikPy.
-        price (int): базовая цена сетки.
+        price (float): базовая цена сетки.
     """
-    global is_orders_sent, position, base_price
-    qty = position
+    global is_orders_sent, base_price
+    # Получаем актуальную позицию из QUIK
+    qty = get_current_position(qp)
+    
+    # Перед выставлением сетки отменяем все заявки
+    cancel_all_orders(qp)
+    
     if qty == 0:
         # При нулевой позиции используем переданную цену для построения сетки
         for i in range(1, LEVELS+1):
@@ -523,7 +529,6 @@ if __name__ == "__main__":
                         is_orders_sent = True
                     # При изменении позиции и выполнении уровня — отменяем старые заявки и переставляем сетку
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
-                        cancel_all_orders(qp)
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
                         is_orders_sent = False  # Ждём появления заявок
