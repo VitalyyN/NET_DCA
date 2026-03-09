@@ -33,8 +33,8 @@ file_name = 'state.txt'
 
 def get_current_price(qp):
     """Возвращает текущую последнюю цену инструмента из QUIK."""
-    # Читаем параметр LAST и приводим к целому числу
-    return int(float(qp.GetParamEx(CLASS, SECCODE, "LAST")['data']['param_value']))
+    # Читаем параметр LAST и приводим к float для поддержки дробных цен
+    return float(qp.GetParamEx(CLASS, SECCODE, "LAST")['data']['param_value'])
 
 
 # def get_price_by_grid(price):
@@ -80,7 +80,7 @@ def read_from_file():
             # Старый формат файла (только цена) или неполный файл — считаем невалидным
             return 0
         try:
-            price = int(lines[0].strip())
+            price = float(lines[0].strip())
             saved_seccode = lines[1].strip()
             # Проверяем, что инструмент не поменялся
             if saved_seccode != SECCODE:
@@ -90,16 +90,16 @@ def read_from_file():
         except (ValueError, IndexError):
             print(f"Предупреждение: файл {file_name} содержит некорректные данные. Используется 0.")
             return 0
-        
-    
+
+
 def get_last_trade_price(qp):
     """Возвращает цену последней сделки по инструменту."""
-    # Берём последний элемент из списка сделок и приводим цену к int
+    # Берём последний элемент из списка сделок и приводим цену к float
     trades = qp.GetTrades(CLASS, SECCODE)['data']
     if not trades or len(trades) == 0:
         return None  # Нет сделок
     last_trade = trades[-1]
-    last_trade_price = int(float(last_trade['price']))
+    last_trade_price = float(last_trade['price'])
     return last_trade_price
         
 
@@ -496,6 +496,11 @@ if __name__ == "__main__":
                     cur_pos = get_current_position(qp)
                     current_price = get_current_price(qp)
                     orders = find_active_orders(qp)
+
+                    # Если базовая цена равна 0 — не торгуем, ждём установки корректной цены
+                    if base_price == 0:
+                        time.sleep(POLL_MS)
+                        continue
 
                     # Проверяем, должна ли быть сетка при текущей позиции
                     should_have_grid = True
