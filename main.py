@@ -501,6 +501,8 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
+                    # После клиринга разрешаем восстановление сетки
+                    is_orders_sent = True
 
                 if check_time(qp):
                     cur_pos = get_current_position(qp)
