@@ -20,12 +20,10 @@ from settings import CLASS, SECCODE, BASE_ASSET_CODE, ACCOUNT, CLIENT_CODE, LOT_
 # - count_exept: счётчик подряд возникших исключений в основном цикле
 # - first_start: флаг первого запуска при непустой позиции для выравнивания
 # - file_name: файл для хранения базовой цены между перезапусками
-# - is_orders_sent: флаг, что сетка заявок выставлена
 trans_id = 1
 position = 0
 base_price = 0
 prev_position = 0
-is_orders_sent = False
 count_exept = 1
 first_start = True
 file_name = 'state.txt'
@@ -254,7 +252,7 @@ def cancel_order(qp, order_num):
         qp: экземпляр QuikPy.
         order_num (int | str): номер заявки (ORDER_KEY).
     """
-    global trans_id, is_orders_sent
+    global trans_id
     trans_id += 1
     # Формируем транзакцию на снятие заявки
     transaction = {
@@ -264,7 +262,6 @@ def cancel_order(qp, order_num):
         'SECCODE': SECCODE,  # Код тикера
         'ORDER_KEY': str(order_num)}  # Номер заявки
     qp.SendTransaction(transaction)["data"]
-    is_orders_sent = False
 
 
 def find_active_orders(qp):
@@ -301,7 +298,7 @@ def set_grid(qp, price):
         qp: экземпляр QuikPy.
         price (float): базовая цена сетки.
     """
-    global is_orders_sent, base_price
+    global base_price
     # Получаем актуальную позицию из QUIK
     qty = get_current_position(qp)
     
@@ -313,7 +310,6 @@ def set_grid(qp, price):
         for i in range(1, LEVELS+1):
             send_limit_order(qp, price - i * GRID_STEP, LOT_PER_LEVEL, "B")
             send_limit_order(qp, price + i * GRID_STEP, LOT_PER_LEVEL, "S")
-        is_orders_sent = True
         base_price = price
         return
     for i in range(1, LEVELS+1):
@@ -322,16 +318,13 @@ def set_grid(qp, price):
             send_limit_order(qp, price - i * GRID_STEP, LOT_PER_LEVEL, "B")
             send_limit_order(qp, price + i * GRID_STEP, LOT_PER_LEVEL, "S")
             qty += LOT_PER_LEVEL if qty > 0 else -LOT_PER_LEVEL
-            is_orders_sent = True
         else:
             if qty > 0:
                 # При перегруженной длинной позиции добавляем только продажи
                 send_limit_order(qp, price + i * GRID_STEP, LOT_PER_LEVEL, "S")
-                is_orders_sent = True
             elif qty < 0:
                 # При перегруженной короткой позиции добавляем только покупки
                 send_limit_order(qp, price - i * GRID_STEP, LOT_PER_LEVEL, "B")
-                is_orders_sent = True
 
 
 def check_base_price_by_grid(qp, price):
@@ -484,11 +477,6 @@ if __name__ == "__main__":
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
                     # После подключения даем время на получение актуальных данных
                     time.sleep(2)
-                    # Проверяем наличие заявок после подключения
-                    orders_after_connect = find_active_orders(qp)
-                    is_orders_sent = len(orders_after_connect) > 0  # True если заявки есть
-                    if is_orders_sent:
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Заявки на месте ({len(orders_after_connect)} шт.), продолжаем работу")
                     # Обновляем prev_position для корректного отслеживания изменений
                     prev_position = get_current_position(qp)
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
@@ -501,8 +489,10 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
-                    # После клиринга разрешаем восстановление сетки
-                    is_orders_sent = True
+                    # После клиринга всегда восстанавливаем сетку
+                    set_grid(qp, base_price)
+                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
+                    continue
 
                 if check_time(qp):
                     cur_pos = get_current_position(qp)
@@ -521,19 +511,14 @@ if __name__ == "__main__":
                         if abs(current_price - base_price) >= GRID_STEP / 2:
                             should_have_grid = False  # Ждём возврата цены или закрытия
 
-                    # Если активных заявок нет и сетка должна быть — восстанавливаем после клиринга
-                    if len(orders) == 0 and should_have_grid and is_orders_sent:
+                    # Если активных заявок нет и сетка должна быть — восстанавливаем
+                    if len(orders) == 0 and should_have_grid:
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена")
-                        is_orders_sent = False  # Ждём появления заявок
-                    # Если заявки появились — разрешаем будущее восстановление
-                    if len(orders) > 0:
-                        is_orders_sent = True
                     # При изменении позиции и выполнении уровня — отменяем старые заявки и переставляем сетку
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
-                        is_orders_sent = False  # Ждём появления заявок
                 time.sleep(POLL_MS)
                 
             except Exception as e:
