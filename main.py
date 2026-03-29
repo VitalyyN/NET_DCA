@@ -194,22 +194,32 @@ def check_session_status(qp):
     """Проверяет статус торговой сессии QUIK через параметр TRADINGPHASE.
 
     Возвращает:
-        bool: True, если торги идут (открытие или основная сессия); False, если клиринг/перерыв/закрытие.
+        bool: True, если торги идут (сессия открыта); False, если клиринг/перерыв/закрытие.
 
-    Значения TRADINGPHASE:
-        0 - Торг не идет
-        1 - Период открытия (торгуем)
-        2 - Основная сессия (торгуем)
-        3 - Период закрытия
+    Примечание:
+        Для спредов FUTSPREAD параметр TRADINGPHASE может возвращать:
+        - param_image: 'открыта' или 'закрыта'
+        - param_value: '1.000000' (может быть и при открытой, и при закрытой сессии)
+        
+        Поэтому проверяем param_image, а не param_value.
     """
     try:
         result = qp.GetParamEx(CLASS, SECCODE, 'TRADINGPHASE')
-        if not result or 'data' not in result or not result['data'].get('param_value'):
-            # Параметр недоступен (например, для спредов) — считаем сессию активной
-            return True
-        trading_phase = int(float(result['data']['param_value']))
-        # Торгуем в фазе 1 (открытие) и 2 (основная сессия)
-        return trading_phase in (1, 2)
+        if result and 'data' in result:
+            param_image = result['data'].get('param_image', '')
+            # Проверяем по изображению параметра (более надёжно для спредов)
+            if param_image == 'открыта':
+                return True
+            elif param_image == 'закрыта':
+                return False
+            # Если param_image не определён, пробуем проверить по param_value
+            param_value = result['data'].get('param_value')
+            if param_value:
+                trading_phase = int(float(param_value))
+                # Торгуем в фазе 1 (открытие) и 2 (основная сессия)
+                return trading_phase in (1, 2)
+        # Если параметр недоступен — считаем сессию активной
+        return True
     except (KeyError, ValueError, TypeError):
         # Если параметр недоступен, считаем сессию активной (для совместимости)
         return True
