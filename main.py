@@ -460,7 +460,11 @@ if __name__ == "__main__":
                     offer_price = float(offer_price_data['data']['param_value']) if offer_price_data and 'data' in offer_price_data and 'param_value' in offer_price_data['data'] else 0
 
                     if bid_price != 0 and offer_price != 0:
-                        base_price = (bid_price + offer_price) / 2 # Средняя между BID и OFFER
+                        # Получаем шаг цены для приведения базовой цены
+                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                        # Средняя между BID и OFFER, приведённая к шагу цены
+                        base_price = round((bid_price + offer_price) / 2 / price_step) * price_step
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Базовая цена установлена по BID/OFFER: {base_price}")
                     elif bid_price != 0:
                         base_price = bid_price
