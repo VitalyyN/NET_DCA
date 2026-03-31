@@ -345,7 +345,7 @@ def check_base_price_by_grid(qp, price):
 
     Параметры:
         qp: экземпляр QuikPy.
-        price (int): текущая рыночная цена.
+        price (float): текущая рыночная цена.
 
     Возвращает:
         bool: True, если требуется/выполнено действие по перестройке; иначе False.
@@ -361,22 +361,36 @@ def check_base_price_by_grid(qp, price):
                 begin_grid_price = (cur_pos // LOT_PER_LEVEL) * GRID_STEP + base_price
                 if price >= begin_grid_price:
                     # Выставляем лимит на продажу для выравнивания длинной позиции
-                    price_to_order = int(float(qp.GetParamEx(CLASS, SECCODE, "BID")['data']['param_value'])) + 1
-                    if price_to_order >= begin_grid_price:
-                        send_limit_order(qp, price_to_order, abs(cur_pos),  "S")
-                        first_start = False
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
-                        return True
+                    bid_result = qp.GetParamEx(CLASS, SECCODE, "BID")
+                    if bid_result and 'data' in bid_result:
+                        bid_price = float(bid_result['data'].get('param_value', 0))
+                        # Получаем шаг цены для корректного расчёта цены заявки
+                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                        # Цена заявки = BID + шаг цены (чтобы заявка исполнилась сразу)
+                        price_to_order = round(bid_price + price_step, 6)
+                        if price_to_order >= begin_grid_price and bid_price > 0:
+                            send_limit_order(qp, price_to_order, abs(cur_pos),  "S")
+                            first_start = False
+                            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                            return True
             elif cur_pos < 0:
                 begin_grid_price = base_price - (abs(cur_pos) // LOT_PER_LEVEL) * GRID_STEP
                 if price <= begin_grid_price:
                     # Выставляем лимит на покупку для выравнивания короткой позиции
-                    price_to_order = int(float(qp.GetParamEx(CLASS, SECCODE, "OFFER")['data']['param_value'])) - 1
-                    if price_to_order <= begin_grid_price:
-                        send_limit_order(qp, price_to_order, abs(cur_pos),  "B")
-                        first_start = False
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
-                        return True
+                    offer_result = qp.GetParamEx(CLASS, SECCODE, "OFFER")
+                    if offer_result and 'data' in offer_result:
+                        offer_price = float(offer_result['data'].get('param_value', 0))
+                        # Получаем шаг цены для корректного расчёта цены заявки
+                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                        # Цена заявки = OFFER - шаг цены (чтобы заявка исполнилась сразу)
+                        price_to_order = round(offer_price - price_step, 6)
+                        if price_to_order <= begin_grid_price and offer_price > 0:
+                            send_limit_order(qp, price_to_order, abs(cur_pos),  "B")
+                            first_start = False
+                            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                            return True
         if abs(price - base_price) >= GRID_STEP / 2:
             return True
         else:
@@ -442,11 +456,11 @@ if __name__ == "__main__":
                     bid_price_data = qp.GetParamEx(CLASS, SECCODE, "BID")
                     offer_price_data = qp.GetParamEx(CLASS, SECCODE, "OFFER")
 
-                    bid_price = int(float(bid_price_data['data']['param_value'])) if 'param_value' in bid_price_data['data'] else 0
-                    offer_price = int(float(offer_price_data['data']['param_value'])) if 'param_value' in offer_price_data['data'] else 0
+                    bid_price = float(bid_price_data['data']['param_value']) if bid_price_data and 'data' in bid_price_data and 'param_value' in bid_price_data['data'] else 0
+                    offer_price = float(offer_price_data['data']['param_value']) if offer_price_data and 'data' in offer_price_data and 'param_value' in offer_price_data['data'] else 0
 
                     if bid_price != 0 and offer_price != 0:
-                        base_price = (bid_price + offer_price) // 2 # Средняя между BID и OFFER
+                        base_price = (bid_price + offer_price) / 2 # Средняя между BID и OFFER
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Базовая цена установлена по BID/OFFER: {base_price}")
                     elif bid_price != 0:
                         base_price = bid_price
