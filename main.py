@@ -166,12 +166,19 @@ def check_time(qp):
     Возвращает:
         bool: True, если текущее время между START_TIME и END_TIME.
     """
-    server_time = str(qp.GetInfoParam('SERVERTIME')['data']).strip()
-    parts = server_time.split(':')
-    if len(parts) < 2:
+    try:
+        server_time_data = qp.GetInfoParam('SERVERTIME')['data']
+        if not server_time_data:
+            return False
+        server_time = str(server_time_data).strip()
+        parts = server_time.split(':')
+        if len(parts) < 2:
+            return False
+        # Нормализуем формат: добавляем ведущий ноль (9:58 → 09:58)
+        current_time = f"{int(parts[0]):02d}:{parts[1]}"
+        return START_TIME <= current_time <= END_TIME
+    except Exception:
         return False
-    current_time = parts[0] + ':' + parts[1]
-    return START_TIME <= current_time <= END_TIME
 
 
 def check_quik_connection(qp):
@@ -409,6 +416,14 @@ if __name__ == "__main__":
         # Даём QUIK время на получение актуальных данных после подключения
         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Получение данных от QUIK...")
         time.sleep(3)
+        
+        # Проверяем, что QUIK возвращает актуальные данные
+        try:
+            server_time = qp.GetInfoParam('SERVERTIME')['data']
+            trade_date = qp.GetInfoParam('TRADEDATE')['data']
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Серверное время QUIK: {trade_date} {server_time}")
+        except Exception as e:
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Предупреждение: не удалось получить время QUIK: {e}")
         
         # Ждём наступления торгового окна START_TIME..END_TIME
         last_status = None
