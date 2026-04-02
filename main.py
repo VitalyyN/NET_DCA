@@ -398,8 +398,8 @@ def check_base_price_by_grid(qp, price):
                             first_start = False
                             print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
                             return True
-        if abs(price - base_price) >= GRID_STEP / 2:
-            return True
+        if abs(price - base_price) > GRID_STEP:
+            return True  # Нужна перестройка сетки
         else:
             cancel_all_orders(qp)
             return False
@@ -468,7 +468,7 @@ if __name__ == "__main__":
                     if not check_quik_connection(qp):
                         print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
                         while not check_quik_connection(qp):
-                            time.sleep(POLL_MS * 10)
+                            time.sleep(POLL_MS * 15)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
                         time.sleep(3)  # Даём время на обновление данных
                         # После подключения проверяем актуальную цену
@@ -556,13 +556,13 @@ if __name__ == "__main__":
                     if not connection_lost:
                         print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
                         connection_lost = True
-                    time.sleep(POLL_MS * 10)
+                    time.sleep(POLL_MS * 15)
                     continue
                 if connection_lost:
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
-                    # После подключения даем время на получение актуальных данных (10 секунд)
-                    time.sleep(10)
+                    # После подключения даем время на получение актуальных данных (15 секунд)
+                    time.sleep(15)
                     # Сбрасываем счётчик ошибок времени
                     time_check_failures = 0
                     # Обновляем prev_position для корректного отслеживания изменений
