@@ -576,9 +576,20 @@ if __name__ == "__main__":
         in_session_wait = False
         connection_lost = False
         time_check_failures = 0  # Счётчик неудачных проверок времени
+        cycle_counter = 1  # Счётчик циклов для проверки дублирования заявок
         
         while True:
             try:
+                # Раз в 10 циклов (10 сек.) проверяем количество заявок
+                if cycle_counter >= 10:
+                    orders = find_active_orders(qp)
+                    max_expected_orders = LEVELS * 2  # Максимум: LEVELS покупок + LEVELS продаж
+                    if len(orders) > max_expected_orders:
+                        # Обнаружено дублирование заявок — отменяем все
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Обнаружено дублирование заявок ({len(orders)} > {max_expected_orders}). Отменяем все...")
+                        cancel_all_orders(qp)
+                        cycle_counter = 1  # Сбрасываем счётчик
+                        # Сетка выставится дальше по коду в цикле
                 # Проверяем соединение QUIK с сервером
                 if not check_quik_connection(qp):
                     if not connection_lost:
@@ -636,6 +647,9 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
+                    # После клиринга сразу восстанавливаем сетку (биржа сняла заявки)
+                    set_grid(qp, base_price)
+                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
                     continue
 
                 if check_time(qp):
@@ -681,6 +695,9 @@ if __name__ == "__main__":
                         # Уровень сетки исполнился — переставляем сетку
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
+                
+                # Увеличиваем счётчик циклов
+                cycle_counter += 1
                 time.sleep(POLL_MS)
                 
             except Exception as e:
