@@ -462,6 +462,7 @@ if __name__ == "__main__":
             if cur_pos != 0:
                 last_wait_status = None
                 wait_printed = False
+                position_closed = False  # Флаг закрытия позиции
                 while check_base_price_by_grid(qp, current_price):
                     # Проверяем соединение с QUIK
                     if not check_quik_connection(qp):
@@ -474,6 +475,17 @@ if __name__ == "__main__":
                         current_price = get_current_price(qp)
                         continue
                     
+                    # Проверяем, не закрылась ли позиция (заявка исполнилась)
+                    current_cur_pos = get_current_position(qp)
+                    if current_cur_pos == 0:
+                        # Позиция закрылась — обновляем базовую цену
+                        position_closed = True
+                        trade_price = get_last_trade_price(qp)
+                        if trade_price is not None:
+                            base_price = trade_price
+                            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Новая базовая цена: {base_price}")
+                        break  # Выход из цикла ожидания
+                    
                     # Проверяем статус сессии и выводим сообщение
                     if not check_session_status(qp):
                         wait_status = "клиринг"
@@ -485,7 +497,11 @@ if __name__ == "__main__":
                         wait_printed = True
                     current_price = get_current_price(qp)
                     time.sleep(POLL_MS)
-                if wait_printed:
+                
+                if position_closed:
+                    # Позиция закрыта — выставляем сетку с новой базовой ценой
+                    pass  # Базовая цена уже обновлена
+                elif wait_printed:
                     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Цена вернулась к базовой — строим сетку\n")
         else: # Если восстановление не требуется (файл пуст/0)
             base_price = get_current_price(qp) # Устанавливаем текущую рыночную цену как базовую
