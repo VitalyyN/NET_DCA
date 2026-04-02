@@ -478,7 +478,20 @@ if __name__ == "__main__":
                 last_wait_status = None
                 wait_printed = False
                 position_closed = False  # Флаг закрытия позиции
-                while check_base_price_by_grid(qp, current_price):
+                while True:
+                    # Проверяем режим работы
+                    need_grid, close_position, pos_closed = check_base_price_by_grid(qp, current_price)
+                    
+                    # Если позиция закрылась — выходим
+                    if pos_closed:
+                        position_closed = True
+                        break
+                    
+                    # Если нужна сетка (цена в канале) — выходим
+                    if need_grid:
+                        break
+                    
+                    # Цена вне канала — ждём возврата
                     # Проверяем соединение с QUIK
                     if not check_quik_connection(qp):
                         print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
@@ -489,7 +502,7 @@ if __name__ == "__main__":
                         # После подключения проверяем актуальную цену
                         current_price = get_current_price(qp)
                         continue
-                    
+
                     # Проверяем, не закрылась ли позиция (заявка исполнилась)
                     current_cur_pos = get_current_position(qp)
                     if current_cur_pos == 0:
@@ -500,7 +513,7 @@ if __name__ == "__main__":
                             base_price = trade_price
                             print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Новая базовая цена: {base_price}")
                         break  # Выход из цикла ожидания
-                    
+
                     # Проверяем статус сессии и выводим сообщение
                     if not check_session_status(qp):
                         wait_status = "клиринг"
@@ -512,7 +525,7 @@ if __name__ == "__main__":
                         wait_printed = True
                     current_price = get_current_price(qp)
                     time.sleep(POLL_MS)
-                
+
                 if position_closed:
                     # Позиция закрыта — выставляем сетку с новой базовой ценой
                     pass  # Базовая цена уже обновлена
