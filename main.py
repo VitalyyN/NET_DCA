@@ -463,6 +463,17 @@ if __name__ == "__main__":
                 last_wait_status = None
                 wait_printed = False
                 while check_base_price_by_grid(qp, current_price):
+                    # Проверяем соединение с QUIK
+                    if not check_quik_connection(qp):
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
+                        while not check_quik_connection(qp):
+                            time.sleep(POLL_MS * 10)
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
+                        time.sleep(3)  # Даём время на обновление данных
+                        # После подключения проверяем актуальную цену
+                        current_price = get_current_price(qp)
+                        continue
+                    
                     # Проверяем статус сессии и выводим сообщение
                     if not check_session_status(qp):
                         wait_status = "клиринг"
@@ -534,8 +545,8 @@ if __name__ == "__main__":
                 if connection_lost:
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
-                    # После подключения даем время на получение актуальных данных
-                    time.sleep(3)
+                    # После подключения даем время на получение актуальных данных (10 секунд)
+                    time.sleep(10)
                     # Сбрасываем счётчик ошибок времени
                     time_check_failures = 0
                     # Обновляем prev_position для корректного отслеживания изменений
