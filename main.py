@@ -520,6 +520,8 @@ if __name__ == "__main__":
         # Основной цикл работы робота: следим за временем, состоянием позиций и активными заявками
         in_session_wait = False
         connection_lost = False
+        time_check_failures = 0  # Счётчик неудачных проверок времени
+        
         while True:
             try:
                 # Проверяем соединение QUIK с сервером
@@ -533,7 +535,9 @@ if __name__ == "__main__":
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
                     # После подключения даем время на получение актуальных данных
-                    time.sleep(2)
+                    time.sleep(3)
+                    # Сбрасываем счётчик ошибок времени
+                    time_check_failures = 0
                     # Обновляем prev_position для корректного отслеживания изменений
                     prev_position = get_current_position(qp)
                     # Не проверяем время сразу после подключения — даём QUIK время на обновление
@@ -541,9 +545,20 @@ if __name__ == "__main__":
                     
                 # Проверяем торговое время — если вне окна, останавливаемся
                 # Проверяем только при активном соединении
-                if not check_time(qp):
-                    print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время завершено. Остановка робота.")
-                    break
+                is_time_ok = check_time(qp)
+                if not is_time_ok:
+                    time_check_failures += 1
+                    # Выходим только после 3 неудачных проверок (защита от ложных срабатываний)
+                    if time_check_failures >= 3:
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время завершено. Остановка робота.")
+                        break
+                    else:
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Предупреждение: не удалось проверить время (попытка {time_check_failures}/3). Ожидание...")
+                        time.sleep(POLL_MS * 5)
+                        continue
+                else:
+                    # Время проверено успешно — сбрасываем счётчик
+                    time_check_failures = 0
                     
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
