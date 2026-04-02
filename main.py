@@ -347,62 +347,77 @@ def set_grid(qp, price):
 def check_base_price_by_grid(qp, price):
     """Проверяет необходимость перестройки сетки и выполняет выравнивание на старте.
 
-    На первом запуске при ненулевой позиции пытается выставить заявку на её выравнивание.
-    Также инициирует перестановку сетки при смещении цены от базовой больше половины шага.
+    Логика:
+        1. Если позиция в плюсе (цена >= begin_grid_price) и заявок нет — выставляем заявку на закрытие.
+        2. Если цена вне канала (±GRID_STEP) — ждём возврата.
+        3. Если цена в канале — нужна сетка.
 
     Параметры:
         qp: экземпляр QuikPy.
         price (float): текущая рыночная цена.
 
     Возвращает:
-        bool: True, если требуется/выполнено действие по перестройке; иначе False.
+        tuple: (need_grid, close_position, position_closed) — нужна ли сетка, закрыли ли позицию, позиция закрыта.
     """
-    global base_price, first_start, prev_position
+    global base_price, prev_position
     cur_pos = get_current_position(qp)
     if cur_pos == 0:
         prev_position = cur_pos
-        return False
+        return (True, False, True)  # Позиция нулевая — нужна сетка
+
+    # 1. Проверка на закрытие прибыльной позиции
+    if cur_pos > 0:
+        # Длинная позиция: закрываем, если цена выше begin_grid_price
+        begin_grid_price = (cur_pos // LOT_PER_LEVEL) * GRID_STEP + base_price
+        if price >= begin_grid_price:
+            # Проверяем, есть ли уже активные заявки
+            orders = find_active_orders(qp)
+            if len(orders) == 0:
+                # Заявок нет — выставляем на закрытие
+                bid_result = qp.GetParamEx(CLASS, SECCODE, "BID")
+                if bid_result and 'data' in bid_result:
+                    bid_price = float(bid_result['data'].get('param_value', 0))
+                    # Получаем шаг цены для корректного расчёта цены заявки
+                    step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+                    price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                    # Цена заявки = BID + шаг цены (чтобы заявка исполнилась сразу)
+                    price_to_order = round(bid_price + price_step, 6)
+                    if price_to_order >= begin_grid_price and bid_price > 0:
+                        send_limit_order(qp, price_to_order, abs(cur_pos),  "S")
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                        return (False, True, False)  # Заявка выставлена, ждём исполнения
+            # Заявка уже есть — ждём исполнения
+            return (False, True, False)
+    elif cur_pos < 0:
+        # Короткая позиция: закрываем, если цена ниже begin_grid_price
+        begin_grid_price = base_price - (abs(cur_pos) // LOT_PER_LEVEL) * GRID_STEP
+        if price <= begin_grid_price:
+            # Проверяем, есть ли уже активные заявки
+            orders = find_active_orders(qp)
+            if len(orders) == 0:
+                # Заявок нет — выставляем на закрытие
+                offer_result = qp.GetParamEx(CLASS, SECCODE, "OFFER")
+                if offer_result and 'data' in offer_result:
+                    offer_price = float(offer_result['data'].get('param_value', 0))
+                    # Получаем шаг цены для корректного расчёта цены заявки
+                    step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+                    price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                    # Цена заявки = OFFER - шаг цены (чтобы заявка исполнилась сразу)
+                    price_to_order = round(offer_price - price_step, 6)
+                    if price_to_order <= begin_grid_price and offer_price > 0:
+                        send_limit_order(qp, price_to_order, abs(cur_pos),  "B")
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
+                        return (False, True, False)  # Заявка выставлена, ждём исполнения
+            # Заявка уже есть — ждём исполнения
+            return (False, True, False)
+
+    # 2. Позиция в минусе или в плюсе, но не достигла уровня закрытия
+    if abs(price - base_price) > GRID_STEP:
+        # Цена за пределами канала — ждём возврата, сетка не нужна
+        return (False, False, False)
     else:
-        if first_start:
-            if cur_pos > 0:
-                begin_grid_price = (cur_pos // LOT_PER_LEVEL) * GRID_STEP + base_price
-                if price >= begin_grid_price:
-                    # Выставляем лимит на продажу для выравнивания длинной позиции
-                    bid_result = qp.GetParamEx(CLASS, SECCODE, "BID")
-                    if bid_result and 'data' in bid_result:
-                        bid_price = float(bid_result['data'].get('param_value', 0))
-                        # Получаем шаг цены для корректного расчёта цены заявки
-                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
-                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
-                        # Цена заявки = BID + шаг цены (чтобы заявка исполнилась сразу)
-                        price_to_order = round(bid_price + price_step, 6)
-                        if price_to_order >= begin_grid_price and bid_price > 0:
-                            send_limit_order(qp, price_to_order, abs(cur_pos),  "S")
-                            first_start = False
-                            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
-                            return True
-            elif cur_pos < 0:
-                begin_grid_price = base_price - (abs(cur_pos) // LOT_PER_LEVEL) * GRID_STEP
-                if price <= begin_grid_price:
-                    # Выставляем лимит на покупку для выравнивания короткой позиции
-                    offer_result = qp.GetParamEx(CLASS, SECCODE, "OFFER")
-                    if offer_result and 'data' in offer_result:
-                        offer_price = float(offer_result['data'].get('param_value', 0))
-                        # Получаем шаг цены для корректного расчёта цены заявки
-                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
-                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
-                        # Цена заявки = OFFER - шаг цены (чтобы заявка исполнилась сразу)
-                        price_to_order = round(offer_price - price_step, 6)
-                        if price_to_order <= begin_grid_price and offer_price > 0:
-                            send_limit_order(qp, price_to_order, abs(cur_pos),  "B")
-                            first_start = False
-                            print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Выставлена заявка на закрытие позиции: {abs(cur_pos)} лотов по {price_to_order}")
-                            return True
-        if abs(price - base_price) > GRID_STEP:
-            return True  # Нужна перестройка сетки
-        else:
-            cancel_all_orders(qp)
-            return False
+        # Цена в канале (±GRID_STEP) — нужна сетка
+        return (True, False, False)
 
 
 if __name__ == "__main__":
@@ -565,11 +580,22 @@ if __name__ == "__main__":
                     time.sleep(15)
                     # Сбрасываем счётчик ошибок времени
                     time_check_failures = 0
-                    # Обновляем prev_position для корректного отслеживания изменений
-                    prev_position = get_current_position(qp)
+                    # Проверяем, не закрылась ли позиция во время разрыва
+                    cur_pos_after_connect = get_current_position(qp)
+                    if cur_pos_after_connect == 0 and position != 0:
+                        # Позиция закрылась во время разрыва — обновляем базовую цену
+                        trade_price = get_last_trade_price(qp)
+                        if trade_price is not None:
+                            base_price = trade_price
+                            write_in_file(base_price)
+                            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта во время разрыва. Новая базовая цена: {base_price}")
+                        set_grid(qp, base_price)
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена после закрытия позиции")
+                    prev_position = cur_pos_after_connect
+                    position = cur_pos_after_connect
                     # Не проверяем время сразу после подключения — даём QUIK время на обновление
                     continue
-                    
+
                 # Проверяем торговое время — если вне окна, останавливаемся
                 # Проверяем только при активном соединении
                 is_time_ok = check_time(qp)
@@ -586,7 +612,7 @@ if __name__ == "__main__":
                 else:
                     # Время проверено успешно — сбрасываем счётчик
                     time_check_failures = 0
-                    
+
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
                     if not in_session_wait:
@@ -597,9 +623,6 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
-                    # После клиринга всегда восстанавливаем сетку
-                    set_grid(qp, base_price)
-                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
                     continue
 
                 if check_time(qp):
@@ -612,19 +635,36 @@ if __name__ == "__main__":
                         time.sleep(POLL_MS)
                         continue
 
-                    # Проверяем, должна ли быть сетка при текущей позиции
-                    should_have_grid = True
-                    if cur_pos != 0:
-                        # При позиции проверяем, должна ли быть сетка или ждём
-                        if abs(current_price - base_price) >= GRID_STEP / 2:
-                            should_have_grid = False  # Ждём возврата цены или закрытия
-
-                    # Если активных заявок нет и сетка должна быть — восстанавливаем
-                    if len(orders) == 0 and should_have_grid:
+                    # Проверяем режим работы: закрытие прибыли или сетка
+                    need_grid, close_position, pos_closed = check_base_price_by_grid(qp, current_price)
+                    
+                    if pos_closed:
+                        # Позиция закрыта (только при запуске) — выставляем сетку
                         set_grid(qp, base_price)
-                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена")
-                    # При изменении позиции и выполнении уровня — отменяем старые заявки и переставляем сетку
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена после закрытия позиции")
+                    elif close_position:
+                        # Заявка на закрытие выставлена — проверяем исполнение
+                        if cur_pos == 0:
+                            # Позиция закрылась — обновляем базовую цену и выставляем сетку
+                            trade_price = get_last_trade_price(qp)
+                            if trade_price is not None:
+                                base_price = trade_price
+                                write_in_file(base_price)
+                                print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Заявка на закрытие исполнилась. Новая базовая цена: {base_price}")
+                            set_grid(qp, base_price)
+                            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена после исполнения заявки")
+                        # else: продолжаем ждать исполнения
+                    elif need_grid:
+                        # Цена в канале — выставляем сетку
+                        if len(orders) > 0:
+                            cancel_all_orders(qp)
+                        set_grid(qp, base_price)
+                        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка выставлена/восстановлена")
+                    # else: цена вне канала — ждём возврата, ничего не делаем
+                        
+                    # Проверяем, не изменилась ли позиция (уровень сетки исполнился)
                     if check_position_change_and_update(cur_pos) and check_levels_executed(cur_pos, qp):
+                        # Уровень сетки исполнился — переставляем сетку
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка переставлена. Базовая цена: {base_price}\n")
                 time.sleep(POLL_MS)
