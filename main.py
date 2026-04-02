@@ -406,10 +406,24 @@ if __name__ == "__main__":
     print(f"Connected to QuikPy on ports {REQUESTS_PORT}/{CALLBACKS_PORT}")
 
     try:
+        # Даём QUIK время на получение актуальных данных после подключения
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Получение данных от QUIK...")
+        time.sleep(3)
+        
         # Ждём наступления торгового окна START_TIME..END_TIME
         last_status = None
         while not check_time(qp) or not check_session_status(qp):
-            status_msg = "торговое время" if check_time(qp) else "клиринг/перерыв"
+            # Проверяем каждое условие отдельно для корректного сообщения
+            is_time_ok = check_time(qp)
+            is_session_ok = check_session_status(qp)
+            
+            if not is_session_ok:
+                status_msg = "клиринг/перерыв"
+            elif not is_time_ok:
+                status_msg = "внерабочее время"
+            else:
+                break  # Оба условия выполнены
+            
             if status_msg != last_status:
                 print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Ожидание: {status_msg}...")
                 last_status = status_msg

@@ -7,8 +7,8 @@ from QuikPy import QuikPy
 
 # Настройки инструмента
 CLASS = "FUTSPREAD"
-SECCODE = "NVM6NVU6"
-BASE_ASSET_CODE = "NVU6"  # Базовый актив (нога спреда)
+SECCODE = "CRM6CRU6"
+BASE_ASSET_CODE = "CRU6"  # Базовый актив (нога спреда)
 
 if __name__ == '__main__':
     qp = QuikPy(requests_port=34132, callbacks_port=34133)
