@@ -536,6 +536,12 @@ if __name__ == "__main__":
                     time.sleep(2)
                     # Обновляем prev_position для корректного отслеживания изменений
                     prev_position = get_current_position(qp)
+                    
+                # Проверяем торговое время — если вне окна, останавливаемся
+                if not check_time(qp):
+                    print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время завершено. Остановка робота.")
+                    break
+                    
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
                     if not in_session_wait:
