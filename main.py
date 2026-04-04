@@ -174,9 +174,11 @@ def check_time(qp):
         parts = server_time.split(':')
         if len(parts) < 2:
             return False
-        # Нормализуем формат: добавляем ведущий ноль (9:58 → 09:58)
-        current_time = f"{int(parts[0]):02d}:{parts[1]}"
-        return START_TIME <= current_time <= END_TIME
+        # Нормализуем формат: добавляем ведущие нули (9:5:3 → 09:05)
+        hour = f"{int(parts[0]):02d}"
+        minute = f"{int(parts[1]):02d}"
+        current_time = f"{hour}:{minute}"
+        return START_TIME <= current_time < END_TIME
     except Exception:
         return False
 
