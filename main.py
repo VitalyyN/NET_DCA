@@ -461,6 +461,11 @@ if __name__ == "__main__":
                 last_status = status_msg
             time.sleep(POLL_MS)
         print()  # Новая строка после ожидания
+        
+        # Задержка 15 секунд после начала торгового времени для стабилизации данных
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время началось. Стабилизация данных (15 сек)...")
+        time.sleep(15)
+        
         # Инициализация текущих значений цены и позиции
         current_price = get_current_price(qp)
         local_base_price = read_from_file()
@@ -649,6 +654,9 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
+                    # Задержка 15 секунд после клиринга для стабилизации данных
+                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Стабилизация данных после клиринга (15 сек)...")
+                    time.sleep(15)
                     # После клиринга сразу восстанавливаем сетку (биржа сняла заявки)
                     set_grid(qp, base_price)
                     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
