@@ -444,27 +444,30 @@ if __name__ == "__main__":
         
         # Ждём наступления торгового окна START_TIME..END_TIME
         last_status = None
+        waited_for_trading = False  # Флаг: ждали ли мы начала торгов
         while not check_time(qp) or not check_session_status(qp):
+            waited_for_trading = True  # Мы вошли в цикл ожидания
             # Проверяем каждое условие отдельно для корректного сообщения
             is_time_ok = check_time(qp)
             is_session_ok = check_session_status(qp)
-            
+
             if not is_session_ok:
                 status_msg = "клиринг/перерыв"
             elif not is_time_ok:
                 status_msg = "внерабочее время"
             else:
                 break  # Оба условия выполнены
-            
+
             if status_msg != last_status:
                 print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Ожидание: {status_msg}...")
                 last_status = status_msg
             time.sleep(POLL_MS)
         print()  # Новая строка после ожидания
         
-        # Задержка 15 секунд после начала торгового времени для стабилизации данных
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время началось. Стабилизация данных (15 сек)...")
-        time.sleep(15)
+        # Задержка 15 секунд только если мы ждали начала торгового времени
+        if waited_for_trading:
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время началось. Стабилизация данных (15 сек)...")
+            time.sleep(15)
         
         # Инициализация текущих значений цены и позиции
         current_price = get_current_price(qp)
