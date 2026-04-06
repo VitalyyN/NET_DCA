@@ -161,26 +161,29 @@ def check_levels_executed(cur_pos, qp):
 
 
 def check_time(qp):
-    """Проверяет, находится ли текущее серверное время в торговом окне.
-
-    Возвращает:
-        bool: True, если текущее время между START_TIME и END_TIME.
+    """Проверяет, находится ли текущее время в торговом окне.
+    Приоритет: Серверное время QUIK -> Локальное время ПК.
     """
+    current_time = None
+    
+    # 1. Пробуем получить серверное время
     try:
-        server_time_data = qp.GetInfoParam('SERVERTIME')['data']
-        if not server_time_data:
-            return False
-        server_time = str(server_time_data).strip()
-        parts = server_time.split(':')
-        if len(parts) < 2:
-            return False
-        # Нормализуем формат: добавляем ведущие нули (9:5:3 → 09:05)
-        hour = f"{int(parts[0]):02d}"
-        minute = f"{int(parts[1]):02d}"
-        current_time = f"{hour}:{minute}"
-        return START_TIME <= current_time < END_TIME
+        res = qp.GetInfoParam('SERVERTIME')
+        if res and 'data' in res and res['data']:
+            server_time = str(res['data']).strip()
+            parts = server_time.split(':')
+            if len(parts) >= 2:
+                h = f"{int(parts[0]):02d}"
+                m = f"{int(parts[1]):02d}"
+                current_time = f"{h}:{m}"
     except Exception:
-        return False
+        pass
+
+    # 2. Если не вышло, берем локальное время компьютера
+    if current_time is None:
+        current_time = datetime.now().strftime('%H:%M')
+
+    return START_TIME <= current_time < END_TIME
 
 
 def check_quik_connection(qp):
