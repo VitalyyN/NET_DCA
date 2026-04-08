@@ -165,6 +165,7 @@ def check_time(qp):
     Приоритет: Серверное время QUIK -> Локальное время ПК.
     """
     current_time = None
+    used_server_time = False
     
     # 1. Пробуем получить серверное время
     try:
@@ -176,16 +177,17 @@ def check_time(qp):
                 h = f"{int(parts[0]):02d}"
                 m = f"{int(parts[1]):02d}"
                 current_time = f"{h}:{m}"
+                used_server_time = True
     except Exception:
         pass
 
     # 2. Если не вышло, берем локальное время компьютера
     if current_time is None:
-        try:
-            current_time = datetime.now().strftime('%H:%M')
-        except Exception:
-            # На случай совсем экзотических ошибок
-            current_time = "12:00"
+        current_time = datetime.now().strftime('%H:%M')
+
+    # Логирование при переключении на локальное время или ошибке сервера
+    if not used_server_time:
+        print(f"DEBUG check_time: Серверное время недоступно, используем локальное: {current_time}")
 
     return START_TIME <= current_time < END_TIME
 
@@ -592,7 +594,6 @@ if __name__ == "__main__":
         # Основной цикл работы робота: следим за временем, состоянием позиций и активными заявками
         in_session_wait = False
         connection_lost = False
-        time_check_failures = 0  # Счётчик неудачных проверок времени
         cycle_counter = 1  # Счётчик циклов для проверки дублирования заявок
         
         while True:
@@ -619,8 +620,6 @@ if __name__ == "__main__":
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
                     # После подключения даем время на получение актуальных данных (15 секунд)
                     time.sleep(15)
-                    # Сбрасываем счётчик ошибок времени
-                    time_check_failures = 0
                     # Проверяем, не закрылась ли позиция во время разрыва
                     cur_pos_after_connect = get_current_position(qp)
                     if cur_pos_after_connect == 0 and position != 0:
@@ -637,7 +636,7 @@ if __name__ == "__main__":
                     # Не проверяем время сразу после подключения — даём QUIK время на обновление
                     continue
 
-                # Проверяем торговое время — если вне окна, просто ждем
+                # Проверяем торговое время — если вне окна, просто ждём
                 if not check_time(qp):
                     time.sleep(POLL_MS * 10)
                     continue
