@@ -181,7 +181,11 @@ def check_time(qp):
 
     # 2. Если не вышло, берем локальное время компьютера
     if current_time is None:
-        current_time = datetime.now().strftime('%H:%M')
+        try:
+            current_time = datetime.now().strftime('%H:%M')
+        except Exception:
+            # На случай совсем экзотических ошибок
+            current_time = "12:00"
 
     return START_TIME <= current_time < END_TIME
 
@@ -633,22 +637,10 @@ if __name__ == "__main__":
                     # Не проверяем время сразу после подключения — даём QUIK время на обновление
                     continue
 
-                # Проверяем торговое время — если вне окна, останавливаемся
-                # Проверяем только при активном соединении
-                is_time_ok = check_time(qp)
-                if not is_time_ok:
-                    time_check_failures += 1
-                    # Выходим только после 3 неудачных проверок (защита от ложных срабатываний)
-                    if time_check_failures >= 3:
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время завершено. Остановка робота.")
-                        break
-                    else:
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Предупреждение: не удалось проверить время (попытка {time_check_failures}/3). Ожидание...")
-                        time.sleep(POLL_MS * 5)
-                        continue
-                else:
-                    # Время проверено успешно — сбрасываем счётчик
-                    time_check_failures = 0
+                # Проверяем торговое время — если вне окна, просто ждем
+                if not check_time(qp):
+                    time.sleep(POLL_MS * 10)
+                    continue
 
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
                 if not check_session_status(qp):
