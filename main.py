@@ -638,7 +638,7 @@ if __name__ == "__main__":
 
                 # Проверяем торговое время — если вне окна, просто ждём
                 if not check_time(qp):
-                    time.sleep(POLL_MS * 10)
+                    time.sleep(POLL_MS)
                     continue
 
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
