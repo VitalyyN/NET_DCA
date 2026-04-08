@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime
 
 from QuikPy import QuikPy
-from settings import CLASS, SECCODE, BASE_ASSET_CODE, ACCOUNT, CLIENT_CODE, LOT_PER_LEVEL, LEVELS, GRID_STEP, MAX_LOTS_TOTAL, START_TIME, END_TIME, POLL_MS, REQUESTS_PORT, CALLBACKS_PORT
+from settings import CLASS, SECCODE, BASE_ASSET_CODE, ACCOUNT, CLIENT_CODE, LOT_PER_LEVEL, LEVELS, GRID_STEP, MAX_LOTS_TOTAL, START_TIME, END_TIME, POLL_MS, REQUESTS_PORT, CALLBACKS_PORT, RECONNECT_POLL_SEC, RECONNECT_DELAY_SEC, STABILIZATION_DELAY_SEC
 
 
 # Глобальные переменные состояния робота
@@ -20,6 +20,7 @@ from settings import CLASS, SECCODE, BASE_ASSET_CODE, ACCOUNT, CLIENT_CODE, LOT_
 # - count_exept: счётчик подряд возникших исключений в основном цикле
 # - first_start: флаг первого запуска при непустой позиции для выравнивания
 # - file_name: файл для хранения базовой цены между перезапусками
+# - _cached_step: кэш шага цены инструмента (загружается один раз)
 trans_id = 1
 position = 0
 base_price = 0
@@ -27,6 +28,22 @@ prev_position = 0
 count_exept = 1
 first_start = True
 file_name = 'state.txt'
+_cached_step = None
+
+
+def get_price_step(qp):
+    """Возвращает шаг цены инструмента. Загружается из QUIK один раз, далее из кэша."""
+    global _cached_step
+    if _cached_step is None:
+        try:
+            step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
+            if step_result and 'data' in step_result:
+                _cached_step = float(step_result['data'].get('param_value', GRID_STEP))
+            else:
+                _cached_step = GRID_STEP
+        except Exception:
+            _cached_step = GRID_STEP
+    return _cached_step
 
 
 def get_current_price(qp):
@@ -160,13 +177,18 @@ def check_levels_executed(cur_pos, qp):
     return False
 
 
+# Глобальный флаг: было ли уже сообщение о переключении на локальное время
+_fallback_time_printed = False
+
+
 def check_time(qp):
     """Проверяет, находится ли текущее время в торговом окне.
     Приоритет: Серверное время QUIK -> Локальное время ПК.
     """
+    global _fallback_time_printed
     current_time = None
     used_server_time = False
-    
+
     # 1. Пробуем получить серверное время
     try:
         res = qp.GetInfoParam('SERVERTIME')
@@ -178,6 +200,7 @@ def check_time(qp):
                 m = f"{int(parts[1]):02d}"
                 current_time = f"{h}:{m}"
                 used_server_time = True
+                _fallback_time_printed = False  # Сброс при восстановлении
     except Exception:
         pass
 
@@ -185,9 +208,10 @@ def check_time(qp):
     if current_time is None:
         current_time = datetime.now().strftime('%H:%M')
 
-    # Логирование при переключении на локальное время или ошибке сервера
-    if not used_server_time:
-        print(f"DEBUG check_time: Серверное время недоступно, используем локальное: {current_time}")
+    # Логирование при переключении на локальное время (только один раз)
+    if not used_server_time and not _fallback_time_printed:
+        print(f"Серверное время недоступно, используем локальное: {current_time}")
+        _fallback_time_printed = True
 
     return START_TIME <= current_time < END_TIME
 
@@ -389,8 +413,7 @@ def check_base_price_by_grid(qp, price):
                 if bid_result and 'data' in bid_result:
                     bid_price = float(bid_result['data'].get('param_value', 0))
                     # Получаем шаг цены для корректного расчёта цены заявки
-                    step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
-                    price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                    price_step = get_price_step(qp)
                     # Цена заявки = BID + шаг цены (чтобы заявка исполнилась сразу)
                     price_to_order = round(bid_price + price_step, 6)
                     if price_to_order >= begin_grid_price and bid_price > 0:
@@ -411,8 +434,7 @@ def check_base_price_by_grid(qp, price):
                 if offer_result and 'data' in offer_result:
                     offer_price = float(offer_result['data'].get('param_value', 0))
                     # Получаем шаг цены для корректного расчёта цены заявки
-                    step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
-                    price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                    price_step = get_price_step(qp)
                     # Цена заявки = OFFER - шаг цены (чтобы заявка исполнилась сразу)
                     price_to_order = round(offer_price - price_step, 6)
                     if price_to_order <= begin_grid_price and offer_price > 0:
@@ -475,8 +497,8 @@ if __name__ == "__main__":
         
         # Задержка 15 секунд только если мы ждали начала торгового времени
         if waited_for_trading:
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время началось. Стабилизация данных (15 сек)...")
-            time.sleep(15)
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Торговое время началось. Стабилизация данных ({STABILIZATION_DELAY_SEC} сек)...")
+            time.sleep(STABILIZATION_DELAY_SEC)
         
         # Инициализация текущих значений цены и позиции
         current_price = get_current_price(qp)
@@ -515,9 +537,9 @@ if __name__ == "__main__":
                     if not check_quik_connection(qp):
                         print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
                         while not check_quik_connection(qp):
-                            time.sleep(POLL_MS * 15)
+                            time.sleep(POLL_MS * RECONNECT_POLL_SEC)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
-                        time.sleep(3)  # Даём время на обновление данных
+                        time.sleep(RECONNECT_DELAY_SEC)  # Даём время на обновление данных
                         # После подключения проверяем актуальную цену
                         current_price = get_current_price(qp)
                         continue
@@ -564,8 +586,7 @@ if __name__ == "__main__":
 
                     if bid_price != 0 and offer_price != 0:
                         # Получаем шаг цены для приведения базовой цены
-                        step_result = qp.GetParamEx(CLASS, SECCODE, "STEP")
-                        price_step = float(step_result['data'].get('param_value', GRID_STEP)) if step_result and 'data' in step_result else GRID_STEP
+                        price_step = get_price_step(qp)
                         # Средняя между BID и OFFER, приведённая к шагу цены
                         base_price = round((bid_price + offer_price) / 2 / price_step) * price_step
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Базовая цена установлена по BID/OFFER: {base_price}")
@@ -613,13 +634,13 @@ if __name__ == "__main__":
                     if not connection_lost:
                         print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
                         connection_lost = True
-                    time.sleep(POLL_MS * 15)
+                    time.sleep(POLL_MS * RECONNECT_POLL_SEC)
                     continue
                 if connection_lost:
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
-                    # После подключения даем время на получение актуальных данных (15 секунд)
-                    time.sleep(15)
+                    # После подключения даем время на получение актуальных данных
+                    time.sleep(RECONNECT_DELAY_SEC)
                     # Проверяем, не закрылась ли позиция во время разрыва
                     cur_pos_after_connect = get_current_position(qp)
                     if cur_pos_after_connect == 0 and position != 0:
@@ -651,9 +672,9 @@ if __name__ == "__main__":
                 if in_session_wait:
                     in_session_wait = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сессия открыта — возобновляем торговлю...")
-                    # Задержка 15 секунд после клиринга для стабилизации данных
-                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Стабилизация данных после клиринга (15 сек)...")
-                    time.sleep(15)
+                    # Задержка стабилизации данных после клиринга
+                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Стабилизация данных после клиринга ({STABILIZATION_DELAY_SEC} сек)...")
+                    time.sleep(STABILIZATION_DELAY_SEC)
                     # После клиринга сразу восстанавливаем сетку (биржа сняла заявки)
                     set_grid(qp, base_price)
                     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Сетка восстановлена после клиринга")
