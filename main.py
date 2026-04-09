@@ -621,6 +621,19 @@ if __name__ == "__main__":
         
         while True:
             try:
+                # Проверяем торговое время — если вне окна, просто ждём
+                if not check_time(qp):
+                    time.sleep(POLL_MS)
+                    continue
+
+                # Проверяем соединение QUIK с сервером
+                if not check_quik_connection(qp):
+                    if not connection_lost:
+                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
+                        connection_lost = True
+                    time.sleep(POLL_MS * RECONNECT_POLL_SEC)
+                    continue
+
                 # Раз в 10 циклов (10 сек.) проверяем количество заявок
                 if cycle_counter >= 10:
                     orders = find_active_orders(qp)
@@ -631,13 +644,7 @@ if __name__ == "__main__":
                         cancel_all_orders(qp)
                         cycle_counter = 1  # Сбрасываем счётчик
                         # Сетка выставится дальше по коду в цикле
-                # Проверяем соединение QUIK с сервером
-                if not check_quik_connection(qp):
-                    if not connection_lost:
-                        print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK отключен от сервера. Ожидание подключения...")
-                        connection_lost = True
-                    time.sleep(POLL_MS * RECONNECT_POLL_SEC)
-                    continue
+                
                 if connection_lost:
                     connection_lost = False
                     print(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} QUIK подключен к серверу — возобновляем работу...")
@@ -657,11 +664,6 @@ if __name__ == "__main__":
                     prev_position = cur_pos_after_connect
                     position = cur_pos_after_connect
                     # Не проверяем время сразу после подключения — даём QUIK время на обновление
-                    continue
-
-                # Проверяем торговое время — если вне окна, просто ждём
-                if not check_time(qp):
-                    time.sleep(POLL_MS)
                     continue
 
                 # Проверяем статус сессии — если закрыта (клиринг), ждём
