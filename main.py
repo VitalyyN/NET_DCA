@@ -400,6 +400,11 @@ def check_base_price_by_grid(qp, price):
         # Позиция нулевая — проверяем, только что закрылась или уже была нулевой
         was_closed = prev_position != 0  # True если позиция изменилась
         prev_position = cur_pos
+        # Обновляем базовую цену по цене последней сделки
+        if was_closed:
+            trade_price = get_last_trade_price(qp)
+            if trade_price is not None:
+                base_price = trade_price
         return (True, False, was_closed)  # need_grid=True, pos_closed=was_closed
 
     # 1. Проверка на закрытие прибыльной позиции
@@ -698,7 +703,8 @@ if __name__ == "__main__":
                     need_grid, close_position, pos_closed = check_base_price_by_grid(qp, current_price)
                     
                     if pos_closed:
-                        # Позиция только что закрылась — выставляем сетку (один раз)
+                        # Позиция только что закрылась — обновляем базовую цену и выставляем сетку (один раз)
+                        write_in_file(base_price)  # Сохраняем обновлённую базовую цену
                         set_grid(qp, base_price)
                         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Позиция закрыта. Сетка выставлена с базовой ценой: {base_price}")
                         position = 0  # Обновляем глобальную позицию
