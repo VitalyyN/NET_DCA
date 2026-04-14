@@ -1,5 +1,5 @@
-# Lua scripts
-*.lua
+# Lua scripts (except QuikPy folder)
+# *.lua  — removed to allow tracking QuikPy Lua files
 
 # Python cache
 __pycache__/
@@ -23,3 +23,6 @@ state.txt
 .idea/
 *.swp
 *.swo
+
+# QuikPy submodule git data
+QuikPy/.git
