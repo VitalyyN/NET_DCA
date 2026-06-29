@@ -26,3 +26,5 @@ state.txt
 
 # QuikPy submodule git data
 QuikPy/.git
+QWEN.md
+test_position.py
